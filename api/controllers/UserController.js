@@ -52,6 +52,8 @@ module.exports = {
 
                     accessToken = qs.parse(accessToken);
 
+                    console.log('accessToken', accessToken);
+
                     var profileOauth = {
                         consumer_key: config.TWITTER_KEY,
                         consumer_secret: config.TWITTER_SECRET,
@@ -64,7 +66,7 @@ module.exports = {
                         oauth: profileOauth,
                         json: true
                     }, function(err, response, profile) {
-
+                        console.log('profile', profile);
                         // Step 5a. Link user accounts.
                         if (req.headers.authorization) {
                             User.findOne({
@@ -79,22 +81,50 @@ module.exports = {
                                 var token = req.headers.authorization.split(' ')[1];
                                 var payload = jwt.decode(token, config.TOKEN_SECRET);
 
-                                User.findById(payload.sub, function(err, user) {
-                                    if (!user) {
-                                        return res.status(400).send({
-                                            message: 'User not found'
-                                        });
-                                    }
+                                /*   User.findById(payload.sub, function(err, user) {
+                                       if (!user) {
+                                           return res.status(400).send({
+                                               message: 'User not found'
+                                           });
+                                       }
 
-                                    user.twitter = profile.id;
-                                    user.displayName = user.displayName || profile.name;
-                                    user.picture = user.picture || profile.profile_image_url.replace('_normal', '');
-                                    user.save(function(err) {
+                                       user.twitter = profile.id;
+                                       user.displayName = user.displayName || profile.name;
+                                       user.picture = user.picture || profile.profile_image_url.replace('_normal', '');
+                                       user.twitterToken = profile.oauth_token;
+                                       user.twitterSecret = profile.oauth_token_secret;
+                                       user.save(function(err) {
+                                           res.send({
+                                               token: createJWT(user)
+                                           });
+                                       });
+                                   });*/
+                                var user = {};
+
+                                user.twitter = profile.id;
+                                user.displayName = user.displayName || profile.name;
+                                user.picture = user.picture || profile.profile_image_url.replace('_normal', '');
+                                user.twitterToken = accessToken.oauth_token;
+                                user.twitterSecret = accessToken.oauth_token_secret;
+
+
+                                User.update(payload.sub, user)
+                                    .exec(function afterwards(err, updated) {
+
+                                        if (err) {
+                                            // handle error here- e.g. `res.serverError(err);`
+                                            return res.status(400).send({
+                                                message: 'User not found'
+                                            });
+                                        }
+
+                                        console.log('Updated user to have name ' + updated[0].name);
+
                                         res.send({
                                             token: createJWT(user)
                                         });
                                     });
-                                });
+
                             });
                         } else {
                             // Step 5b. Create a new user account or return an existing one.
@@ -103,9 +133,11 @@ module.exports = {
                             }, function(err, existingUser) {
                                 if (existingUser) {
                                     return res.send({
-                                        token: createJWT(existingUser)
+                                        token: createToken(existingUser)
                                     });
                                 }
+
+
                                 /*
                                                                 var user = new User();
                                                                 user.twitter = profile.id;
@@ -119,8 +151,8 @@ module.exports = {
                                 User.create({
                                     twitter: profile.user_id,
                                     displayName: profile.screen_name,
-                                    twitterToken: profile.oauth_token,
-                                    twitterSecret: profile.oauth_token_secret
+                                    twitterToken: accessToken.oauth_token,
+                                    twitterSecret: accessToken.oauth_token_secret
                                 }).exec(function(err, user) {
                                     var token = createToken(user);
                                     res.send({
